@@ -14,12 +14,14 @@ import (
 )
 
 type good struct {
-	date    string
-	name    string
-	price   string
-	urluser string
-	userbl  string
-	url     string
+	date  string
+	name  string
+	price string
+	user  string
+	about string
+	url   string
+	view  string
+	time  string
 }
 
 var (
@@ -30,18 +32,6 @@ var (
 // api + main doman
 var url string = fmt.Sprintf("%v%v", scraperUrlApi, mainurl)
 
-/*
-**
-
-	type goods struct {
-		name  string
-		price string
-		urls  string
-		img   string
-	}
-
-**
-*/
 type FakeBrowserHeadersResponse struct {
 	Result []map[string]string `json:"result"`
 }
@@ -101,9 +91,8 @@ func farpostGetPages() string {
 	c.Visit(fmt.Sprintf("%v", url))
 	return total
 }
-func farpostGetUrls(total int) ([]string, []string) {
-	var listofhrefs []string
-	var listofviews []string
+func farpostGetUrls(total int) map[string]string {
+	var listofviews map[string]string = map[string]string{}
 	//var total string
 	headersList := GetHeadersList()
 	//initialision of collector
@@ -116,34 +105,54 @@ func farpostGetUrls(total int) ([]string, []string) {
 		}
 		fmt.Println("Scraping:", r.URL)
 	})
+
 	//code of connect to the site
 	c.OnResponse(func(r *colly.Response) {
 		fmt.Println("Status:", r.StatusCode)
 
 	})
+
 	c.OnHTML("td#bulletins", func(e *colly.HTMLElement) {
-		//не корректно отображает просмотры
-		e.ForEach("a.bulletinLink", func(_ int, e *colly.HTMLElement) {
-			listofhrefs = append(listofhrefs, fmt.Sprintf("%v%v", strings.TrimSuffix(url, "/vladivostok/sport/"), e.Attr("href")))
+		//
+		e.ForEach("div.descriptionCell", func(_ int, e *colly.HTMLElement) {
+			listofviews[fmt.Sprintf("%v%v", strings.TrimSuffix(url, "/vladivostok/sport/"), e.ChildAttr("a.bulletinLink", "href"))] = e.ChildText("span.views")
 		})
-		e.ForEach("span.views", func(_ int, e *colly.HTMLElement) {
-			/*
-				view, err := strconv.Atoi(e.Text)
-				if err != nil {
-					log.Fatal(err)
-				}
-			*/
-			if len(e.Text) < 1 {
-				listofviews = append(listofviews, "1")
-			} else {
-				listofviews = append(listofviews, e.Text)
-			}
-		})
+
 	})
-	for i := 1; i <= 100 && i <= total; i++ {
+	for i := 1; i <= 1 && i <= total; i++ {
 		c.Visit(fmt.Sprintf("%v?page=%v", url, i))
 	}
-	return listofhrefs, listofviews
+	return listofviews //listofviews
+}
+
+// не получает данные со страницы
+func farpostGetCard(url, view string) {
+	var data good
+	now := time.Now()
+	headersList := GetHeadersList()
+	//initialision of collector
+	c := colly.NewCollector()
+	//Navigate on site pages
+	c.OnRequest(func(r *colly.Request) {
+		randomHeader := RandomHeader(headersList)
+		for key, value := range randomHeader {
+			r.Headers.Set(key, value)
+		}
+		fmt.Println("Scraping:", r.URL)
+	})
+	//code of connect to the site
+	c.OnHTML("td#bulletins", func(e *colly.HTMLElement) {
+		data.about = e.ChildText("p.inplace")
+		data.date = e.ChildText("div.viewbull-actual-date")
+		data.name = e.ChildText("span.inplace")
+		data.price = e.ChildAttr("span.data-bulletin-price", "data-bulletin-price")
+		data.url = url
+		data.user = e.ChildAttr("span.userNick > a", "href")
+		data.view = view
+		data.time = now.Format("2006/01/02 15:04")
+		fmt.Println(data)
+	})
+	c.Visit(fmt.Sprintf("%v", url))
 
 }
 func main() {
@@ -152,9 +161,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	hrefs, views := farpostGetUrls(pages)
-	for i := range hrefs {
-		fmt.Println(hrefs[i] + " - " + views[i])
+	urlView := farpostGetUrls(pages)
+	for url, view := range urlView {
+		farpostGetCard(url, view)
 	}
 
 }
